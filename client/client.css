@@ -1,0 +1,16 @@
+td {
+	vertical-align: top;
+}
+
+input[type=text] {
+	width: 350px;
+}
+
+#log {
+	width: 600px;
+	height: 500px;
+	overflow-x: scroll;
+	overflow-y: scroll;
+	background-color: #DFF;
+	margin: 20px;
+}

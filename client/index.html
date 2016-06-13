@@ -1,0 +1,46 @@
+<html>
+<body>
+<head>
+	<link rel="stylesheet" href="client.css" />
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+	<script src="client.js"></script>
+</head>
+
+<!--
+   This page is meant as a helper to test the backend push broker.
+   It is not supposed to be state-of-the-art frontend HTML.
+-->
+
+<h1>Peer</h1>
+
+<table>
+	<tr>
+		<td>
+			<form>
+				<dl>
+					<dt>Service endpoint</dt>
+					<dd><input type="text" value="ws://192.168.1.25:12345/enter" id="service"></dd>
+					<dt>Peer ID (A)</dt>
+					<dd><input type="text" id="A"></dd>
+				</dl>
+				<button id="connect">Connect</button>
+			</form>
+			<form>
+				<dl>
+					<dt>Target peer ID (B)</dt>
+					<dd><input type="text" id="B"></dd>
+					<dt>Message (M)</dt>
+					<dd><input type="text" id="M"></dd>
+				</dl>
+				<button id="send">Send</button>
+			</form>
+		</td>
+		<td>
+			<div id="log"></div>
+		</td>
+	</tr>
+</table>
+
+
+</body>
+</html>
