@@ -12,7 +12,9 @@ import (
 
 func main() {
 	http.Handle("/enter", websocket.Handler(EnterServer))
-	err := http.ListenAndServe(":12345", nil)
+	const addr = ":12345"
+	fmt.Println("Listening on", addr)
+	err := http.ListenAndServe(addr, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -76,6 +78,10 @@ func EnterServer(wsA *websocket.Conn) {
 	err := websocket.Message.Receive(wsA, &A)
 	if err != nil {
 		processError(wsA, "Error reading new peer name: "+err.Error())
+		return
+	}
+	if _, existsA := peers.Get(A); existsA {
+		processError(wsA, "Peer name "+A+" already taken")
 		return
 	}
 
