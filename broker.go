@@ -61,6 +61,7 @@ func (peers *GuardedPeers) Remove(A string) {
 	defer peers.Unlock()
 	fmt.Println(A + " has left the party")
 	delete(peers.Peers, A)
+	// We don't need to lock the *GuardedConn here. Just removing its ref from the map.
 }
 
 // peers is the only instance of Peers for this server.
