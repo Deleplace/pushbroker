@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,109 +10,123 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-type PeerID [8]byte
-
-func (id PeerID) String() string {
-	return string(id[:])
-}
-
-type GuardedConn struct {
-	sync.Mutex
-	*websocket.Conn
-}
-
-type Peers map[PeerID]GuardedConn
-
-type GuardedPeers struct {
-	sync.RWMutex
-	Peers
-}
-
-func (peers *GuardedPeers) Add(A PeerID, ws *websocket.Conn) {
-	peers.Lock()
-	defer peers.Unlock()
-	gws := GuardedConn{
-		sync.Mutex{},
-		ws,
-	}
-	peers.Peers[A] = gws
-}
-
-func (peers *GuardedPeers) Get(B PeerID) (GuardedConn, bool) {
-	peers.Lock()
-	defer peers.Unlock()
-	gws, exists := peers.Peers[B]
-	return gws, exists
-}
-
-var peers = GuardedPeers{
-	sync.RWMutex{},
-	Peers{},
-}
-
-func EnterServer(wsA *websocket.Conn) {
-	addr := wsA.RemoteAddr().String()
-
-	var A PeerID
-	// Read exactly 8 bytes: the new participant's name
-	n, err := wsA.Read(A[:])
-	if err != nil && err != io.EOF {
-		processError(wsA, "Error reading new peer name: "+err.Error())
-		return
-	}
-	if n < len(A) {
-		processError(wsA, "Invalid name: "+A.String())
-		return
-	}
-
-	if _, existsA := peers.Get(A); existsA {
-		processError(wsA, "Peer name "+A.String()+" already taken")
-		return
-	}
-
-	fmt.Println(A.String() + " entered the party (from " + addr + ")")
-	peers.Add(A, wsA)
-
-	var B PeerID
-	for {
-		n, err := wsA.Read(B[:])
-		if err != nil && err != io.EOF {
-			processError(wsA, "Error reading destination peer name: "+err.Error())
-			return
-		}
-		if n < len(B) {
-			processError(wsA, "Invalid name for B: "+B.String())
-			return
-		}
-
-		var buf bytes.Buffer
-		_, err = buf.ReadFrom(wsA)
-		if err != nil && err != io.EOF {
-			processError(wsA, "Error reading message M to deliver: "+err.Error())
-			return
-		}
-		M := buf.String()
-
-		wsB, existsB := peers.Get(B)
-		if !existsB {
-			processError(wsA, "Target peer "+B.String()+" not currently connected")
-			return
-		}
-		fmt.Println(A.String() + " entered the party (from " + addr + ")")
-		fmt.Fprintln(wsB, M)
-	}
-}
-
-func processError(ws *websocket.Conn, errmsg string) {
-	fmt.Fprintln(os.Stderr, errmsg)
-	fmt.Fprintln(ws, errmsg)
-	ws.Close()
-}
-
 func main() {
 	http.Handle("/enter", websocket.Handler(EnterServer))
 	err := http.ListenAndServe(":12345", nil)
 	if err != nil {
 		panic(err)
 	}
+}
+
+// GuardedConn is a websocket Conn, guarded by a Mutex
+type GuardedConn struct {
+	sync.Mutex
+	*websocket.Conn
+}
+
+// Peers is a set of currently connected peers.
+// Key is the peer name.
+// Value is the open websocket connection to the peer.
+// Value type is a pointer, because the value Mutex inside GuardedConn must not be copied.
+type Peers map[string]*GuardedConn
+
+// GuardedConn is a set of currently connected peers, guarded by a Mutex
+type GuardedPeers struct {
+	sync.RWMutex
+	Peers
+}
+
+func (peers *GuardedPeers) Add(A string, ws *websocket.Conn) {
+	peers.Lock()
+	defer peers.Unlock()
+	gws := GuardedConn{
+		sync.Mutex{},
+		ws,
+	}
+	peers.Peers[A] = &gws
+	fmt.Println(A + " entered the party")
+}
+
+func (peers *GuardedPeers) Get(B string) (*GuardedConn, bool) {
+	peers.Lock()
+	defer peers.Unlock()
+	gws, exists := peers.Peers[B]
+	return gws, exists
+}
+
+func (peers *GuardedPeers) Remove(A string) {
+	peers.Lock()
+	defer peers.Unlock()
+	fmt.Println(A + " has left the party")
+	delete(peers.Peers, A)
+}
+
+// peers is the only instance of Peers for this server.
+var peers = GuardedPeers{
+	sync.RWMutex{},
+	Peers{},
+}
+
+// EnterServer
+func EnterServer(wsA *websocket.Conn) {
+	addr := wsA.RemoteAddr().String()
+	fmt.Println("New connection from remote host " + addr)
+
+	var A string
+	err := websocket.Message.Receive(wsA, &A)
+	if err != nil {
+		processError(wsA, "Error reading new peer name: "+err.Error())
+		return
+	}
+
+	peers.Add(A, wsA)
+	defer peers.Remove(A)
+
+	var B string
+	for {
+		err := websocket.Message.Receive(wsA, &B)
+		if err == io.EOF {
+			// A has quit. No Problem.
+			return
+		}
+		if err != nil {
+			processError(wsA, "Error reading destination peer name: "+err.Error())
+			return
+		}
+
+		var M string
+		err = websocket.Message.Receive(wsA, &M)
+		if err != nil {
+			processError(wsA, "Error reading message M to deliver: "+err.Error())
+			return
+		}
+
+		wsB, existsB := peers.Get(B)
+		if !existsB {
+			fmt.Fprintln(os.Stderr, "Source peer "+A+" can't deliver because target peer "+B+" is not currently known")
+			// The target peer is not known, so the message won't be delivered.
+			// This is not an exceptional case, it doesn't stop the server nor the peer A.
+			// The source peer A is not notified (per requirement).
+			continue
+		}
+
+		wsB.Lock()
+		fmt.Println("Delivering message from " + A + " to " + B + ": " + M)
+		// Note that the target peer B won't notified of the source peer name A.
+		// A may decide, if it wishes, to include its name inside message M.
+		err = websocket.Message.Send(wsB.Conn, M)
+		if err != nil {
+			processError(wsA, "Error sending message ["+M+"] to "+B+": "+err.Error())
+		}
+		wsB.Unlock()
+	}
+}
+
+// processError, in case of unexpected error, prints error on
+// server stderr, sends the error message to origin websocket,
+// and close origin websocket.
+func processError(ws *websocket.Conn, errmsg string) {
+	fmt.Fprintln(os.Stderr, errmsg)
+	fmt.Fprintln(ws, errmsg)
+	ws.Close()
 }
