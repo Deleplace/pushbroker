@@ -3,12 +3,12 @@ td {
 }
 
 input[type=text] {
-	width: 350px;
+	width: 300px;
 }
 
 #log {
-	width: 600px;
-	height: 500px;
+	width: 450px;
+	height: 300px;
 	overflow-x: scroll;
 	overflow-y: scroll;
 	background-color: #DFF;

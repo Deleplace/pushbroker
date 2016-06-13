@@ -50,8 +50,8 @@ func (peers *GuardedPeers) Add(A string, ws *websocket.Conn) {
 }
 
 func (peers *GuardedPeers) Get(B string) (*GuardedConn, bool) {
-	peers.Lock()
-	defer peers.Unlock()
+	peers.RLock()
+	defer peers.RUnlock()
 	gws, exists := peers.Peers[B]
 	return gws, exists
 }
@@ -70,7 +70,8 @@ var peers = GuardedPeers{
 	Peers{},
 }
 
-// EnterServer
+// EnterServer is the handler for the total lifetime of
+// the persistent WebSocket connection of a peer.
 func EnterServer(wsA *websocket.Conn) {
 	addr := wsA.RemoteAddr().String()
 	fmt.Println("New connection from remote host " + addr)
@@ -89,6 +90,7 @@ func EnterServer(wsA *websocket.Conn) {
 	peers.Add(A, wsA)
 	defer peers.Remove(A)
 
+	// The infinite loop waits for A to send messages to other peers.
 	var B string
 	for {
 		err := websocket.Message.Receive(wsA, &B)
@@ -110,7 +112,7 @@ func EnterServer(wsA *websocket.Conn) {
 
 		wsB, existsB := peers.Get(B)
 		if !existsB {
-			fmt.Fprintln(os.Stderr, "Source peer "+A+" can't deliver because target peer "+B+" is not currently known")
+			fmt.Fprintln(os.Stderr, "Message from source peer "+A+" can't be delivered because target peer "+B+" is not currently known")
 			// The target peer is not known, so the message won't be delivered.
 			// This is not an exceptional case, it doesn't stop the server nor the peer A.
 			// The source peer A is not notified (per requirement).
@@ -131,7 +133,7 @@ func EnterServer(wsA *websocket.Conn) {
 
 // processError, in case of unexpected error, prints error on
 // server stderr, sends the error message to origin websocket,
-// and close origin websocket.
+// and closes origin websocket.
 func processError(ws *websocket.Conn, errmsg string) {
 	fmt.Fprintln(os.Stderr, errmsg)
 	fmt.Fprintln(ws, errmsg)
