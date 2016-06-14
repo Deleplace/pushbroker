@@ -32,7 +32,7 @@ type GuardedConn struct {
 // Value type is a pointer, because the value Mutex inside GuardedConn must not be copied.
 type Peers map[string]*GuardedConn
 
-// GuardedConn is a set of currently connected peers, guarded by a Mutex
+// GuardedPeers is a set of currently connected peers, guarded by a Mutex
 type GuardedPeers struct {
 	sync.RWMutex
 	Peers
