@@ -1,7 +1,7 @@
 # pushbroker
 Message broker for web browsers
 
-The purpose is to let any peer A send a text message to any peer B, where A and B may be web browsers.
+The purpose is to let any peer A send a text message M to any peer B, where A and B may be web browsers.
 
 This implementation uses an intermediate server between A and B : the "Broker".
 
