@@ -119,6 +119,10 @@ func EnterServer(wsA *websocket.Conn) {
 			continue
 		}
 
+		// There is a small TOCTOU here, but inherently it is always
+		// possible that B leaves surreptitiously when we try to talk
+		// to her through the network.
+
 		wsB.Lock()
 		fmt.Println("Delivering message from " + A + " to " + B + ": " + M)
 		// Note that the target peer B won't notified of the source peer name A.
