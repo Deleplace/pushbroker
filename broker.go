@@ -90,6 +90,12 @@ func EnterServer(wsA *websocket.Conn) {
 	peers.Add(A, wsA)
 	defer peers.Remove(A)
 
+	// A now offically exists! (in the global map)
+	err = websocket.Message.Send(wsA, "OK")
+	if err != nil {
+		processError(wsA, "Error acknowledging new peer "+A+": "+err.Error())
+	}
+
 	// The infinite loop waits for A to send messages to other peers.
 	var B string
 	for {

@@ -1,9 +1,9 @@
 package main
 
 import (
-	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
-	"time"
 
 	"golang.org/x/net/websocket"
 )
@@ -14,18 +14,10 @@ import (
 // It starts its own server and its own clients.
 
 func TestBrokerMessages(t *testing.T) {
-	serve := func() {
-		http.Handle("/enter", websocket.Handler(EnterServer))
-		err := http.ListenAndServe(":12345", nil)
-		if err != nil {
-			panic(err)
-		}
-	}
-	go serve()
-	// Giving time for the server to init (is there a better way??)
-	time.Sleep(time.Second)
+	ts := httptest.NewServer(websocket.Handler(EnterServer))
+	defer ts.Close()
 
-	url := "ws://localhost:12345/enter"
+	url := strings.Replace(ts.URL, "http://", "ws://", 1)
 	origin := "http://localhost/"
 
 	checkerr := func(err error) {
@@ -63,6 +55,12 @@ func TestBrokerMessages(t *testing.T) {
 	alice := connect("Alice")
 	bob := connect("Bob")
 	carol := connect("Carol")
+	for _, peer := range []*websocket.Conn{alice, bob, carol} {
+		ack := receive(peer)
+		if ack != "OK" {
+			t.Errorf("New peer acknowledgement received %q, want %q", ack, "OK")
+		}
+	}
 	send(alice, "Bob", "Hello Bob")
 	send(bob, "Carol", "Hi Carol")
 	send(carol, "Carol", "I'm fabulous")
